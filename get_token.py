@@ -3,7 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #   "httpx>=0.27",
-#   "pywebview>=5.0",
+#   "playwright>=1.40",
 # ]
 # ///
 """Fetch a Moodle Web Services token via one of several methods.
@@ -15,13 +15,15 @@ Methods:
                  copy the displayed token. Best for SSO sites that allow
                  users to self-serve tokens. Fragile: some Moodle themes
                  show a non-API field that looks like a valid token.
-  mobile         Default. Opens an embedded webview, completes SSO inside
-                 it, and auto-captures the moodlemobile:// redirect token
-                 from the final page DOM. Verifies the signature against
-                 md5(wwwroot + passport). Works on any SSO site.
-  manual-mobile  Same flow as 'mobile' but in your default browser; you
-                 paste the resulting moodlemobile:// URL by hand. Fallback
-                 if pywebview can't run (e.g. no display, missing libs).
+  mobile         Default. Launches a Playwright-controlled Chromium, you
+                 complete SSO inside it, and the moodlemobile:// redirect
+                 is captured at the network level. Verifies the signature
+                 against md5(wwwroot + passport). Works with Microsoft
+                 Azure AD, Google, SAML, OAuth — any real-browser SSO.
+                 First run downloads Chromium (~150MB, one-time).
+  manual-mobile  Same flow but in your default browser; you paste the
+                 resulting moodlemobile:// URL by hand. Fallback when
+                 Playwright can't run (e.g. headless server, no GUI).
 
 By default the token is written to ./.env (chmod 600) and only a masked
 preview is shown. Pass --stdout to print the full token instead (for use
@@ -113,20 +115,49 @@ def method_web(base: str) -> str | None:
     return token or None
 
 
+def _ensure_playwright_chromium() -> bool:
+    """Install Playwright's Chromium binary on demand, once."""
+    import subprocess
+
+    print(
+        "  Playwright's Chromium isn't installed yet.",
+        "  Installing now (~150MB, one-time)…",
+        sep="\n",
+        file=sys.stderr,
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        capture_output=False,
+    )
+    return result.returncode == 0
+
+
 def method_mobile(base: str) -> str | None:
-    """Open an embedded webview, complete SSO, auto-capture token."""
+    """Launch a Playwright-controlled Chromium, auto-capture token.
+
+    Plain pywebview-style approaches stall inside Microsoft Azure AD's
+    auto-form-submit step (third-party cookies and SSO JS quirks). A real
+    Chromium instance driven by Playwright handles every common SSO
+    provider, and Playwright lets us intercept the moodlemobile:// URL
+    at the network-request layer regardless of whether Moodle emits a
+    server-side 303 or a JS-based redirect.
+    """
     try:
-        import webview  # type: ignore
+        from playwright.sync_api import (  # type: ignore
+            Error as PlaywrightError,
+            sync_playwright,
+        )
     except ImportError as e:
         print(
-            f"  pywebview not available ({e}). Use --method manual-mobile,",
-            "  or install pywebview (`uv pip install pywebview` /",
-            "  `pip install pywebview`). On Linux you may also need",
-            "  libgtk-3 and gir1.2-webkit2-4.1.",
+            f"  playwright not available ({e}).",
+            "  Use --method manual-mobile, or run:",
+            "    pip install playwright && playwright install chromium",
             sep="\n",
             file=sys.stderr,
         )
         return None
+
+    import time
 
     passport = secrets.token_hex(16)
     launch = (
@@ -134,55 +165,107 @@ def method_mobile(base: str) -> str | None:
         f"?service=moodle_mobile_app&passport={passport}&urlscheme=moodlemobile"
     )
 
-    state: dict[str, str | None] = {"raw": None}
+    captured: dict[str, str | None] = {"url": None}
 
-    def on_loaded(window):
-        if state["raw"]:
-            return
-        try:
-            html = window.evaluate_js(
-                "document.documentElement && document.documentElement.outerHTML"
-            )
-        except Exception:
-            return
-        if not html:
-            return
-        m = _MOODLEMOBILE_RE.search(html)
-        if m:
-            state["raw"] = m.group(1)
+    print(f"  Launching Chromium (passport: {passport[:8]}…).")
+    print("  Complete SSO in the window that opens. It will close itself")
+    print("  the moment the moodlemobile:// redirect fires.")
+
+    try:
+        with sync_playwright() as p:
             try:
-                window.destroy()
-            except Exception:
+                browser = p.chromium.launch(headless=False)
+            except PlaywrightError as e:
+                msg = str(e)
+                if "Executable doesn't exist" in msg or "playwright install" in msg:
+                    if not _ensure_playwright_chromium():
+                        print("  Chromium install failed.", file=sys.stderr)
+                        return None
+                    browser = p.chromium.launch(headless=False)
+                else:
+                    raise
+
+            context = browser.new_context()
+            page = context.new_page()
+
+            def on_request(request):
+                if captured["url"]:
+                    return
+                if request.url.startswith("moodlemobile://"):
+                    captured["url"] = request.url
+
+            def on_response(response):
+                # Some Moodle versions emit a server-side 303 instead of JS.
+                # The Location header carries the moodlemobile URL.
+                if captured["url"]:
+                    return
+                if 300 <= response.status < 400:
+                    loc = response.headers.get("location", "")
+                    if loc.startswith("moodlemobile://"):
+                        captured["url"] = loc
+
+            page.on("request", on_request)
+            page.on("response", on_response)
+
+            try:
+                page.goto(launch, wait_until="domcontentloaded")
+            except PlaywrightError:
+                # Goto can raise once Chromium hits moodlemobile:// — ignore.
                 pass
 
-    print(f"  Opening login window (passport: {passport[:8]}…).")
-    print("  Complete SSO. The window will close automatically on success.")
+            deadline = time.time() + 300
+            last_url = None
+            while time.time() < deadline and captured["url"] is None:
+                if page.is_closed():
+                    print("  Window closed before SSO finished.", file=sys.stderr)
+                    break
+                try:
+                    current = page.url
+                except PlaywrightError:
+                    current = ""
+                if current and current != last_url:
+                    shown = current.split("?", 1)[0]
+                    print(
+                        f"  [{time.strftime('%H:%M:%S')}] page: {shown[:90]}",
+                        file=sys.stderr,
+                    )
+                    last_url = current
+                # Secondary path: scrape the DOM for a JS-emitted URL.
+                if not captured["url"]:
+                    try:
+                        m = _MOODLEMOBILE_RE.search(page.content())
+                        if m:
+                            captured["url"] = f"moodlemobile://token={m.group(1)}"
+                    except PlaywrightError:
+                        pass
+                page.wait_for_timeout(400)
 
-    window = webview.create_window(
-        "Moodle login",
-        launch,
-        width=900,
-        height=720,
-    )
-    window.events.loaded += on_loaded
-    try:
-        webview.start()
+            try:
+                browser.close()
+            except Exception:
+                pass
     except Exception as e:
-        print(f"  Webview failed: {e}", file=sys.stderr)
-        print("  Try --method manual-mobile instead.", file=sys.stderr)
+        print(f"  Playwright error: {e}", file=sys.stderr)
         return None
 
-    if not state["raw"]:
+    raw = captured["url"]
+    if not raw:
         print(
-            "  No token captured (window closed before SSO completed?).",
+            "  Timed out without capturing a token.",
+            "  Re-run with --method manual-mobile as a fallback.",
+            sep="\n",
             file=sys.stderr,
         )
         return None
 
-    signature, token = _decode_payload(state["raw"])
-    if not token:
+    if "token=" not in raw:
+        print(f"  Unexpected capture: {raw[:80]}", file=sys.stderr)
         return None
 
+    b64 = raw.split("token=", 1)[1].split("&", 1)[0].split("#", 1)[0]
+    signature, token = _decode_payload(b64)
+    if not token:
+        return None
     if signature and not _verify_signature(signature, base, passport):
         print(
             f"  WARNING: signature mismatch (got {signature[:8]}…). "
@@ -190,7 +273,6 @@ def method_mobile(base: str) -> str | None:
             file=sys.stderr,
         )
         return None
-
     return token
 
 
@@ -260,7 +342,7 @@ def main() -> int:
         choices=["auto", "local", "web", "mobile", "manual-mobile"],
         default="auto",
         help=(
-            "auto: 'local' (if --user given) → 'mobile' (webview capture). "
+            "auto: 'local' (if --user given) → 'mobile' (Playwright Chromium). "
             "'mobile' is the cross-SSO default."
         ),
     )
