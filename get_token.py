@@ -16,11 +16,16 @@ Methods:
           URL — paste that URL back; we base64-decode the token.
           Works for any SSO site, even when web is locked down.
 
+By default the token is written to ./.env (chmod 600) and only a masked
+preview is shown. Pass --stdout to print the full token instead (for use
+in pipes/redirects); never let it land in scrollback.
+
 Usage:
   ./get_token.py https://moodle.epita.fr
   ./get_token.py https://moodle.epita.fr --method web
   ./get_token.py https://moodle.epita.fr --method local --user jdoe
-  ./get_token.py https://moodle.epita.fr --env-file .env
+  ./get_token.py https://moodle.epita.fr --env-file path/.env
+  ./get_token.py https://moodle.epita.fr --stdout > my-token.txt
 """
 
 from __future__ import annotations
@@ -72,7 +77,7 @@ def method_web(base: str) -> str | None:
         webbrowser.open(url)
     except Exception:
         pass
-    token = input("  Paste token (empty to skip): ").strip()
+    token = getpass.getpass("  Paste token (hidden, empty to skip): ").strip()
     return token or None
 
 
@@ -91,7 +96,7 @@ def method_mobile(base: str) -> str | None:
     except Exception:
         pass
 
-    raw = input("  Paste moodlemobile://... URL: ").strip()
+    raw = getpass.getpass("  Paste moodlemobile://... URL (hidden): ").strip()
     if not raw or "token=" not in raw:
         print("  No token= found in URL", file=sys.stderr)
         return None
@@ -112,6 +117,8 @@ def method_mobile(base: str) -> str | None:
 
 
 def write_env(env_file: Path, base: str, token: str) -> None:
+    env_file = env_file.expanduser().resolve()
+    env_file.parent.mkdir(parents=True, exist_ok=True)
     preserved: list[str] = []
     if env_file.exists():
         for line in env_file.read_text().splitlines():
@@ -121,7 +128,13 @@ def write_env(env_file: Path, base: str, token: str) -> None:
     body = "\n".join(preserved + [f"MOODLE_URL={base}", f"MOODLE_TOKEN={token}"])
     env_file.write_text(body + "\n")
     env_file.chmod(0o600)
-    print(f"  Wrote {env_file} (chmod 600)")
+    print(f"  Wrote {env_file} (chmod 600)", file=sys.stderr)
+
+
+def mask(token: str) -> str:
+    if len(token) <= 8:
+        return "*" * len(token)
+    return f"{token[:4]}…{token[-4:]} ({len(token)} chars)"
 
 
 def main() -> int:
@@ -140,7 +153,13 @@ def main() -> int:
     p.add_argument(
         "--env-file",
         type=Path,
-        help="Write MOODLE_URL/MOODLE_TOKEN here (chmod 600).",
+        default=Path(".env"),
+        help="Where to write MOODLE_URL/MOODLE_TOKEN (default: ./.env, chmod 600).",
+    )
+    p.add_argument(
+        "--stdout",
+        action="store_true",
+        help="Print the raw token to stdout instead of writing a file. Use only for pipes/redirects.",
     )
     args = p.parse_args()
 
@@ -172,9 +191,11 @@ def main() -> int:
         print("\nNo token obtained.", file=sys.stderr)
         return 2
 
-    print(f"\nToken: {token}")
-    if args.env_file:
+    if args.stdout:
+        print(token)
+    else:
         write_env(args.env_file, base, token)
+        print(f"  Token: {mask(token)}", file=sys.stderr)
     return 0
 
 
