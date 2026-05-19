@@ -1,19 +1,11 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "mcp[cli]>=1.2.0",
-#   "httpx>=0.27",
-# ]
-# ///
 """Moodle MCP server.
 
 Exposes Moodle Web Services (REST) as MCP tools. Works with any MCP client
 (Claude Code, Claude Desktop, Codex, Cursor, etc.) over stdio.
 
 Required env vars:
-    MOODLE_URL    e.g. https://moodle.epita.fr
-    MOODLE_TOKEN  Web Services token (see get_token.py)
+    MOODLE_URL    e.g. https://moodle.example.org
+    MOODLE_TOKEN  Web Services token (see `moodle-mcp-token`)
 """
 
 from __future__ import annotations
@@ -25,14 +17,17 @@ from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-MOODLE_URL = os.environ.get("MOODLE_URL", "https://moodle.epita.fr").rstrip("/")
-TOKEN = os.environ.get("MOODLE_TOKEN")
-if not TOKEN:
-    raise SystemExit("MOODLE_TOKEN env var is required")
-
-REST = f"{MOODLE_URL}/webservice/rest/server.php"
-
 mcp = FastMCP("moodle")
+
+
+def _config() -> tuple[str, str]:
+    url = os.environ.get("MOODLE_URL", "").rstrip("/")
+    token = os.environ.get("MOODLE_TOKEN", "")
+    if not url:
+        raise SystemExit("MOODLE_URL env var is required")
+    if not token:
+        raise SystemExit("MOODLE_TOKEN env var is required")
+    return url, token
 
 
 def _flatten(params: dict[str, Any]) -> dict[str, Any]:
@@ -50,14 +45,15 @@ def _flatten(params: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _call(fn: str, **params: Any) -> Any:
+    url, token = _config()
     payload = {
-        "wstoken": TOKEN,
+        "wstoken": token,
         "wsfunction": fn,
         "moodlewsrestformat": "json",
         **_flatten(params),
     }
     async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.post(REST, data=payload)
+        r = await client.post(f"{url}/webservice/rest/server.php", data=payload)
         r.raise_for_status()
         data = r.json()
         if isinstance(data, dict) and data.get("exception"):
@@ -179,8 +175,9 @@ async def download_file(file_url: str, save_path: str) -> dict:
         file_url: pluginfile.php URL from a module's `contents[].fileurl`
         save_path: absolute local path to write the file to
     """
+    _, token = _config()
     sep = "&" if "?" in file_url else "?"
-    url = f"{file_url}{sep}token={TOKEN}"
+    url = f"{file_url}{sep}token={token}"
     dest = Path(save_path).expanduser()
     dest.parent.mkdir(parents=True, exist_ok=True)
     async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
@@ -190,5 +187,9 @@ async def download_file(file_url: str, save_path: str) -> dict:
     return {"saved": str(dest), "bytes": len(r.content)}
 
 
-if __name__ == "__main__":
+def main() -> None:
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()

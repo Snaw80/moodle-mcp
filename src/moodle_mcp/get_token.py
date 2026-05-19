@@ -1,11 +1,3 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#   "httpx>=0.27",
-#   "playwright>=1.40",
-# ]
-# ///
 """Fetch a Moodle Web Services token via one of several methods.
 
 Methods:
@@ -30,12 +22,12 @@ preview is shown. Pass --stdout to print the full token instead (for use
 in pipes/redirects); never let it land in scrollback.
 
 Usage:
-  ./get_token.py https://moodle.epita.fr
-  ./get_token.py https://moodle.epita.fr --method web
-  ./get_token.py https://moodle.epita.fr --method local --user jdoe
-  ./get_token.py https://moodle.epita.fr --method manual-mobile
-  ./get_token.py https://moodle.epita.fr --env-file path/.env
-  ./get_token.py https://moodle.epita.fr --stdout > my-token.txt
+  moodle-mcp-token https://moodle.example.org
+  moodle-mcp-token https://moodle.example.org --method web
+  moodle-mcp-token https://moodle.example.org --method local --user jdoe
+  moodle-mcp-token https://moodle.example.org --method manual-mobile
+  moodle-mcp-token https://moodle.example.org --env-file path/.env
+  moodle-mcp-token https://moodle.example.org --stdout > my-token.txt
 """
 
 from __future__ import annotations
@@ -336,7 +328,7 @@ def main() -> int:
         description="Fetch a Moodle Web Services token.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("moodle_url", help="e.g. https://moodle.epita.fr")
+    p.add_argument("moodle_url", help="e.g. https://moodle.example.org")
     p.add_argument(
         "--method",
         choices=["auto", "local", "web", "mobile", "manual-mobile"],
