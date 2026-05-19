@@ -1,4 +1,4 @@
-# moodle-mcp
+# mcp-moodle
 
 An [MCP](https://modelcontextprotocol.io) server that exposes
 [Moodle Web Services](https://docs.moodle.org/dev/Web_services) to any
@@ -27,16 +27,16 @@ The recommended way is [`uv`](https://docs.astral.sh/uv/) — no virtualenv to m
 
 ```bash
 # One-off run (no install)
-uvx moodle-mcp
+uvx mcp-moodle
 
 # Or persist as a tool
-uv tool install moodle-mcp
+uv tool install mcp-moodle
 ```
 
 Plain pip works too:
 
 ```bash
-pip install moodle-mcp
+pip install mcp-moodle
 ```
 
 ## Get a token
@@ -47,14 +47,14 @@ SAML, OAuth), or manual paste:
 
 ```bash
 # Default: opens a Chromium window, you complete SSO, token is captured
-uvx --from "moodle-mcp[token]" moodle-mcp-token https://moodle.example.org
+uvx --from "mcp-moodle[token]" mcp-moodle-token https://moodle.example.org
 
 # Native (non-SSO) account
-uvx --from "moodle-mcp[token]" moodle-mcp-token https://moodle.example.org \
+uvx --from "mcp-moodle[token]" mcp-moodle-token https://moodle.example.org \
   --method local --user jdoe
 
 # Headless server fallback (paste the moodlemobile:// URL by hand)
-uvx --from "moodle-mcp[token]" moodle-mcp-token https://moodle.example.org \
+uvx --from "mcp-moodle[token]" mcp-moodle-token https://moodle.example.org \
   --method manual-mobile
 ```
 
@@ -73,7 +73,7 @@ Pass `--stdout` to print it to stdout instead.
 claude mcp add moodle \
   --env MOODLE_URL=https://moodle.example.org \
   --env MOODLE_TOKEN=your_token_here \
-  -- uvx moodle-mcp
+  -- uvx mcp-moodle
 ```
 
 ### Claude Desktop
@@ -86,7 +86,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
   "mcpServers": {
     "moodle": {
       "command": "uvx",
-      "args": ["moodle-mcp"],
+      "args": ["mcp-moodle"],
       "env": {
         "MOODLE_URL": "https://moodle.example.org",
         "MOODLE_TOKEN": "your_token_here"
@@ -99,7 +99,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`
 ### Cursor / other clients
 
 Any MCP client that supports stdio servers works the same way: command
-`uvx`, args `["moodle-mcp"]`, env `MOODLE_URL` and `MOODLE_TOKEN`.
+`uvx`, args `["mcp-moodle"]`, env `MOODLE_URL` and `MOODLE_TOKEN`.
 
 ## Verify it works
 
@@ -112,7 +112,7 @@ your name, username, and the site URL.
 git clone git@github.com:Snaw80/moodle-mcp.git
 cd moodle-mcp
 uv sync --all-extras
-uv run moodle-mcp
+uv run mcp-moodle
 ```
 
 ## Security notes

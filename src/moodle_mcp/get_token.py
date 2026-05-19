@@ -22,12 +22,12 @@ preview is shown. Pass --stdout to print the full token instead (for use
 in pipes/redirects); never let it land in scrollback.
 
 Usage:
-  moodle-mcp-token https://moodle.example.org
-  moodle-mcp-token https://moodle.example.org --method web
-  moodle-mcp-token https://moodle.example.org --method local --user jdoe
-  moodle-mcp-token https://moodle.example.org --method manual-mobile
-  moodle-mcp-token https://moodle.example.org --env-file path/.env
-  moodle-mcp-token https://moodle.example.org --stdout > my-token.txt
+  mcp-moodle-token https://moodle.example.org
+  mcp-moodle-token https://moodle.example.org --method web
+  mcp-moodle-token https://moodle.example.org --method local --user jdoe
+  mcp-moodle-token https://moodle.example.org --method manual-mobile
+  mcp-moodle-token https://moodle.example.org --env-file path/.env
+  mcp-moodle-token https://moodle.example.org --stdout > my-token.txt
 """
 
 from __future__ import annotations

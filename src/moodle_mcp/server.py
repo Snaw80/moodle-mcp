@@ -5,7 +5,7 @@ Exposes Moodle Web Services (REST) as MCP tools. Works with any MCP client
 
 Required env vars:
     MOODLE_URL    e.g. https://moodle.example.org
-    MOODLE_TOKEN  Web Services token (see `moodle-mcp-token`)
+    MOODLE_TOKEN  Web Services token (see `mcp-moodle-token`)
 """
 
 from __future__ import annotations

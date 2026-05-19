@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/moodle-mcp
+      url: https://pypi.org/p/mcp-moodle
     permissions:
       id-token: write
       contents: read
