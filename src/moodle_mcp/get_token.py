@@ -386,12 +386,15 @@ def main() -> int:
     else:
         write_env(args.env_file, base, token)
         print(f"  Token: {mask(token)}", file=sys.stderr)
+        env_path = args.env_file.expanduser().resolve()
         print(
-            "\nNext step — register the server with Claude Code:\n"
-            f"  claude mcp add moodle --scope user \\\n"
-            f"    --env MOODLE_URL={base} \\\n"
-            f"    --env MOODLE_TOKEN={token} \\\n"
-            f"    -- uvx mcp-moodle",
+            "\nNext step — register the server with Claude Code "
+            "(reads MOODLE_URL/MOODLE_TOKEN from .env, never echoes the token):\n"
+            f'  set -a && source "{env_path}" && set +a\n'
+            "  claude mcp add moodle --scope user \\\n"
+            '    --env MOODLE_URL="$MOODLE_URL" \\\n'
+            '    --env MOODLE_TOKEN="$MOODLE_TOKEN" \\\n'
+            "    -- uvx mcp-moodle",
             file=sys.stderr,
         )
     return 0
