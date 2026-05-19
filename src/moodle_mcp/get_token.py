@@ -386,6 +386,14 @@ def main() -> int:
     else:
         write_env(args.env_file, base, token)
         print(f"  Token: {mask(token)}", file=sys.stderr)
+        print(
+            "\nNext step — register the server with Claude Code:\n"
+            f"  claude mcp add moodle --scope user \\\n"
+            f"    --env MOODLE_URL={base} \\\n"
+            f"    --env MOODLE_TOKEN={token} \\\n"
+            f"    -- uvx mcp-moodle",
+            file=sys.stderr,
+        )
     return 0
 
 
