@@ -41,6 +41,27 @@ Plain pip works too:
 pip install mcp-moodle
 ```
 
+## Update
+
+If you installed with `uv tool install`, upgrade to the latest published
+version with:
+
+```bash
+uv tool upgrade mcp-moodle
+```
+
+If you run it one-off with `uvx`, force a fresh fetch with:
+
+```bash
+uvx --refresh mcp-moodle
+```
+
+For pip installs:
+
+```bash
+pip install -U mcp-moodle
+```
+
 ## Get a token
 
 Moodle Web Services require a personal token. The package ships a helper that
