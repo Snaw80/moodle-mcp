@@ -15,6 +15,8 @@ _"download the slides from CS101 week 3"_ — without leaving the chat.
 - **`get_course_contents`** — sections, modules, file URLs
 - **`search_courses`** — search the public catalog
 - **`list_assignments`** — assignments across one or all courses
+- **`list_quizzes`** — quizzes/QCMs in one or all visible courses
+- **`get_quiz_qcm_content`** — rendered QCM questions, readable text, and images
 - **`upcoming_events`** — calendar deadlines and sessions
 - **`get_user_grades`** — your grades for a course
 - **`download_file`** — save any Moodle file locally (token appended automatically)
@@ -105,6 +107,23 @@ Any MCP client that supports stdio servers works the same way: command
 
 In your MCP client, ask: _"call the moodle site_info tool"_. You should see
 your name, username, and the site URL.
+
+## Quiz / QCM content
+
+Use `list_quizzes` to find quiz instance ids, then call `get_quiz_qcm_content`
+with the quiz id. The tool reuses the latest unfinished attempt when one
+exists. If no unfinished attempt exists, it returns
+`requires_attempt_creation: true` instead of starting an attempt silently; ask
+the user for permission, then call again with `start_if_needed: true`.
+
+Each returned question keeps Moodle's raw `html` and also includes:
+
+- `text` — cleaned readable text with formula/image labels from `alt`/`title`
+- `images` — image metadata with the original `url` and a token-free
+  `download_url` that can be passed to `download_file`
+
+`download_file` automatically converts Moodle `pluginfile.php` URLs to the
+token-aware `webservice/pluginfile.php` form before downloading.
 
 ## Development
 
